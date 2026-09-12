@@ -11,6 +11,7 @@ interface ExploreStageProps {
   setExploreCardIndex: (index: number) => void;
   scrollToElement: (id: string, offset?: number) => void;
   onContinue: () => void;
+  tapToRevealEnabled?: boolean;
 }
 
 // Reveal steps:
@@ -26,6 +27,7 @@ export const Explore: React.FC<ExploreStageProps> = ({
   setExploreCardIndex,
   scrollToElement,
   onContinue,
+  tapToRevealEnabled = true,
 }) => {
   const totalCards = data.cards.length;
   // Step 0: title only
@@ -40,7 +42,7 @@ export const Explore: React.FC<ExploreStageProps> = ({
   const isUserScrollingRef = useRef<boolean>(false);
   const userScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const isFullyRevealed = revealStep >= maxRevealStep;
+  const isFullyRevealed = !tapToRevealEnabled || revealStep >= maxRevealStep;
 
   // Calculate exact offset so the example section is scrolled to sit JUST below the sticky indicator bar
   const getIndicatorBottomOffset = () => {
@@ -51,6 +53,7 @@ export const Explore: React.FC<ExploreStageProps> = ({
 
   // When user taps to continue: reveal indicator and example, highlight the relevant number, and scroll so example sits just below indicator
   const handleNextReveal = () => {
+    if (!tapToRevealEnabled) return;
     soundFX.playClick();
     if (revealStep < maxRevealStep) {
       const nextStep = revealStep + 1;
@@ -246,8 +249,8 @@ export const Explore: React.FC<ExploreStageProps> = ({
         </p>
       )}
 
-      {/* Sticky Indicator Navigation Bar - Shown after tap: revealStep >= 1 */}
-      {revealStep >= 1 && (
+      {/* Sticky Indicator Navigation Bar - Shown after tap or when tapToReveal is disabled */}
+      {(!tapToRevealEnabled || revealStep >= 1) && (
         <div
           id="explore-indicator-bar"
           className="sticky top-14 z-30 mb-2.5 py-0.5 flex justify-center w-full animate-fadeIn"
@@ -288,11 +291,11 @@ export const Explore: React.FC<ExploreStageProps> = ({
         </div>
       )}
 
-      {/* Progressive Example Cards - Shown after tap: starts just below the indicator section with minor spacing */}
-      {revealStep >= 1 && (
+      {/* Progressive Example Cards - Shown after tap or when tapToReveal is disabled */}
+      {(!tapToRevealEnabled || revealStep >= 1) && (
         <div className="space-y-4 mb-6">
           {data.cards.map((card, idx) => {
-            const isCardRevealed = revealStep >= 1 + idx;
+            const isCardRevealed = !tapToRevealEnabled || revealStep >= 1 + idx;
             if (!isCardRevealed) return null;
 
           return (

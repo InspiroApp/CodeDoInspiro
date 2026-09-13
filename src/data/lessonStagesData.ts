@@ -47,7 +47,9 @@ export interface PredictQuestion {
   topicMeta: string;
   title?: string;
   language: string;
-  code: string[];
+  /** Omit for a pure comprehension/MCQ check (no code to predict output for) --
+   * used e.g. for purely conceptual topics like "What is Kotlin?". */
+  code?: string[];
   prompt: string;
   options: PredictOption[];
   explanation: {
@@ -84,7 +86,24 @@ export interface Stage4WriteRunData {
   };
 }
 
-export interface Stage5MasteredData {
+export type DebugBugType = 'syntax' | 'logic' | 'runtime' | 'null-safety' | 'type' | 'collection';
+
+export interface Stage5DebugData {
+  title: string;
+  subtitle: string;
+  challengeNumber: number;
+  totalChallenges: number;
+  difficulty: 'easy' | 'medium' | 'hard';
+  bugType: DebugBugType;
+  bugLabel: string;
+  brokenCode: string;
+  fixedCode: string;
+  expectedOutput: string;
+  hints: [string, string, string]; // Hint 1: Conceptual clue, Hint 2: Narrow reasoning, Hint 3: Pinpointed direction
+  explanation: string;
+}
+
+export interface Stage6MasteredData {
   topicTitle: string;
   summary: string;
   passedCount: string;
@@ -97,6 +116,16 @@ export interface Stage5MasteredData {
   accuracy: string;
 }
 
+// Backward compatibility alias for Stage5MasteredData
+export type Stage5MasteredData = Stage6MasteredData;
+
+// Learn and Mastered are always required -- every topic needs a concept
+// explanation and a completion confirmation. The other four are optional per
+// CODEDO_MASTER_PLAN.md's "topic-aware activity selection": a simple/purely
+// conceptual topic (e.g. "What is Kotlin?") should only use the activities
+// that meaningfully prove understanding -- often just Learn -> MCQ (Predict)
+// -> Mastered, skipping Explore/Write&Run/Debug entirely rather than forcing
+// them onto content where they don't fit.
 export interface FiveStageLesson {
   id: string;
   worldId: string;
@@ -104,10 +133,11 @@ export interface FiveStageLesson {
   stageName: string;
   topicTitle: string;
   learn: Stage1LearnData;
-  explore: Stage2ExploreData;
-  predict: Stage3PredictData;
-  writeRun: Stage4WriteRunData;
-  mastered: Stage5MasteredData;
+  explore?: Stage2ExploreData;
+  predict?: Stage3PredictData;
+  writeRun?: Stage4WriteRunData;
+  debug?: Stage5DebugData;
+  mastered: Stage6MasteredData;
 }
 
 export const FUNCTIONS_LESSON: FiveStageLesson = {
@@ -422,10 +452,43 @@ fun multiply(a: Int, b: Int): Int {
       expected: '20'
     }
   },
+  debug: {
+    title: 'Diagnose the Function Defect',
+    subtitle: 'Inspect the broken function, find why the return value fails the requirements, and fix it.',
+    challengeNumber: 1,
+    totalChallenges: 1,
+    difficulty: 'easy',
+    bugType: 'logic',
+    bugLabel: 'Logic Flaw: Incorrect Operator in Return',
+    brokenCode: `fun multiply(a: Int, b: Int): Int {
+    // BUG: Returning sum instead of product!
+    return a + b
+}
+
+fun main() {
+    val result = multiply(4, 5)
+    println("Result: $result")
+}`,
+    fixedCode: `fun multiply(a: Int, b: Int): Int {
+    return a * b
+}
+
+fun main() {
+    val result = multiply(4, 5)
+    println("Result: $result")
+}`,
+    expectedOutput: 'Result: 20',
+    hints: [
+      'Look closely at the arithmetic operation performed in the return statement.',
+      'The function says "multiply", but the arithmetic operator inside is adding the two parameters.',
+      'Replace the addition operator (+) with the multiplication operator (*) in "return a * b".'
+    ],
+    explanation: 'The function originally used the addition operator (+) instead of multiplication (*), causing multiply(4, 5) to return 9 instead of 20. Replacing it with `return a * b` resolves the logic defect.'
+  },
   mastered: {
     topicTitle: 'Kotlin Functions',
-    summary: 'You have successfully mastered function syntax, parameters, return values, and invoked structured code flow.',
-    passedCount: '4 / 4 PASSED',
+    summary: 'You have successfully mastered function syntax, parameters, return values, and diagnosed real-world code defects.',
+    passedCount: '5 / 5 PASSED',
     verificationItems: [
       {
         title: 'Concept understood',
@@ -442,9 +505,13 @@ fun multiply(a: Int, b: Int): Int {
       {
         title: 'Code written & executed',
         subtitle: '5 practical runtime tests passed'
+      },
+      {
+        title: 'Bugs diagnosed & repaired',
+        subtitle: 'Resolved arithmetic logic flaw & verified execution'
       }
     ],
-    xpEarned: 50,
+    xpEarned: 60,
     streakDays: 5,
     accuracy: '100%'
   }
@@ -651,10 +718,51 @@ export const LOOPS_LESSON: FiveStageLesson = {
       expected: '10'
     }
   },
+  debug: {
+    title: 'Diagnose the Loop Boundary Bug',
+    subtitle: 'Identify why the accumulator sum misses the final number, and fix the loop range expression.',
+    challengeNumber: 1,
+    totalChallenges: 1,
+    difficulty: 'easy',
+    bugType: 'logic',
+    bugLabel: 'Off-by-One Range Boundary Bug',
+    brokenCode: `fun sumRange(max: Int): Int {
+    var sum = 0
+    // BUG: using 'until' excludes the max boundary number!
+    for (i in 1 until max) {
+        sum += i
+    }
+    return sum
+}
+
+fun main() {
+    val total = sumRange(4)
+    println("Total: $total")
+}`,
+    fixedCode: `fun sumRange(max: Int): Int {
+    var sum = 0
+    for (i in 1..max) {
+        sum += i
+    }
+    return sum
+}
+
+fun main() {
+    val total = sumRange(4)
+    println("Total: $total")
+}`,
+    expectedOutput: 'Total: 10',
+    hints: [
+      'Check the range operator inside the for-loop header.',
+      'Notice that `until` creates an open-ended range that stops before `max` (1 until 4 only iterates 1, 2, 3 = 6).',
+      'Replace `1 until max` with the closed range operator `1..max` so 4 is included.'
+    ],
+    explanation: 'Using `1 until max` excluded the endpoint `4`, yielding 6 instead of 10. Replacing it with `1..max` includes all integers from 1 up to 4, producing the correct total of 10.'
+  },
   mastered: {
     topicTitle: 'Kotlin Loops',
-    summary: 'You have mastered iteration mechanics, range bounds, step modifiers, and break controls.',
-    passedCount: '4 / 4 PASSED',
+    summary: 'You have mastered iteration mechanics, range bounds, step modifiers, and diagnosed off-by-one loop defects.',
+    passedCount: '5 / 5 PASSED',
     verificationItems: [
       {
         title: 'Concept understood',
@@ -671,9 +779,13 @@ export const LOOPS_LESSON: FiveStageLesson = {
       {
         title: 'Code written & executed',
         subtitle: 'Loop algorithm executed flawlessly'
+      },
+      {
+        title: 'Bugs diagnosed & repaired',
+        subtitle: 'Corrected boundary range condition in loop'
       }
     ],
-    xpEarned: 50,
+    xpEarned: 60,
     streakDays: 5,
     accuracy: '100%'
   }
@@ -990,11 +1102,38 @@ export const VARIABLES_LESSON: FiveStageLesson = {
       expected: 'Player Alex holds 40 coins'
     }
   },
+  debug: {
+    title: 'Diagnose the Mutation Violation',
+    subtitle: 'Identify why the program fails with a compile error when trying to reassign score, and fix it.',
+    challengeNumber: 1,
+    totalChallenges: 1,
+    difficulty: 'easy',
+    bugType: 'syntax',
+    bugLabel: 'Syntax / Mutability Bug: Val Reassignment',
+    brokenCode: `fun main() {
+    // BUG: score is declared with val, but modified below!
+    val score = 50
+    score = score + 25
+    println("Final Score: $score")
+}`,
+    fixedCode: `fun main() {
+    var score = 50
+    score = score + 25
+    println("Final Score: $score")
+}`,
+    expectedOutput: 'Final Score: 75',
+    hints: [
+      'In Kotlin, what is the key difference between `val` and `var`?',
+      '`val` creates a read-only immutable reference that cannot be reassigned after declaration.',
+      'Change `val score = 50` to `var score = 50` so `score` can be updated with `score + 25`.'
+    ],
+    explanation: 'In Kotlin, `val` represents an immutable reference. Reassigning `score = score + 25` generates a compilation error: "Val cannot be reassigned". Changing `val` to `var` allows mutable state updates.'
+  },
   mastered: {
     topicTitle: 'Variables & Immutability',
     summary:
-      'You have mastered Kotlin variable declarations, the core distinction between val and var, type inference, and string template interpolation.',
-    passedCount: '4/4',
+      'You have mastered Kotlin variable declarations, the core distinction between val and var, type inference, and diagnosed mutability compile bugs.',
+    passedCount: '5/5',
     verificationItems: [
       {
         title: 'val vs var Distinction',
@@ -1011,10 +1150,413 @@ export const VARIABLES_LESSON: FiveStageLesson = {
       {
         title: 'Static Type Safety',
         subtitle: 'Prevented invalid type reassignment at compile time'
+      },
+      {
+        title: 'Bugs diagnosed & repaired',
+        subtitle: 'Fixed val reassignment compile violation'
       }
     ],
-    xpEarned: 50,
+    xpEarned: 60,
     streakDays: 12,
+    accuracy: '100%'
+  }
+};
+
+// Pure theory topic -- per CODEDO_MASTER_PLAN.md's own "What is Kotlin?"
+// example: Learn -> MCQ (via Predict, code-less) -> Mastered. No Explore,
+// Write & Run, or Debug: those activities don't meaningfully apply to a
+// conceptual "what/why" topic, and function syntax (params, return types)
+// belongs to the Functions world (World 5), not here.
+export const WHAT_IS_KOTLIN_LESSON: FiveStageLesson = {
+  id: 'what-is-kotlin-lesson',
+  worldId: 'world-1',
+  worldName: 'Kotlin Awakening',
+  stageName: 'STAGE 1 — FOUNDATIONS',
+  topicTitle: 'What is Kotlin?',
+  learn: {
+    title: 'What is Kotlin?',
+    subtitle:
+      'Kotlin is a modern programming language created by JetBrains in 2011. In 2017, Google made it an officially supported language for Android development, and today it also powers backend services, desktop apps, and even iOS apps through Kotlin Multiplatform.',
+    exampleTag: 'GOOD TO KNOW',
+    exampleTitle: 'A taste of Kotlin',
+    language: 'Kotlin',
+    codeSnippet: [
+      'fun main() {',
+      '    println("Hello, Kotlin!")',
+      '}'
+    ],
+    explanation: 'This is roughly what a small Kotlin program looks like. Don\'t worry about the details yet -- you\'ll learn exactly how this works in the next lesson.',
+    keyIdeas: [
+      {
+        number: 1,
+        title: 'Created by JetBrains',
+        description: 'The same company behind IntelliJ IDEA and other popular developer tools, first released in 2011.'
+      },
+      {
+        number: 2,
+        title: 'Official language for Android',
+        description: 'Google declared Kotlin an officially supported Android language in 2017, and now recommends it as the preferred choice.'
+      },
+      {
+        number: 3,
+        title: 'Statically typed and null-safe',
+        description: 'Every value\'s type is checked before the program runs, and Kotlin\'s type system is designed to catch accidental null-related crashes early.'
+      },
+      {
+        number: 4,
+        title: 'Runs almost everywhere',
+        description: 'Beyond Android, Kotlin runs on the JVM for backend/server code, compiles to JavaScript, and even targets native platforms via Kotlin Multiplatform.'
+      },
+      {
+        number: 5,
+        title: 'Fully interoperable with Java',
+        description: 'Kotlin code can call Java code and vice versa, which is why so many existing Java/Android projects were able to adopt it gradually.'
+      }
+    ],
+    keyTakeaway: 'Kotlin is a modern, safe, and versatile language -- trusted for Android and increasingly used everywhere else too.'
+  },
+  predict: {
+    title: 'Check Your Understanding',
+    subtitle: 'A few quick questions based on what you just read -- no code involved yet.',
+    questions: [
+      {
+        id: 'mcq-kotlin-1',
+        questionNumber: 1,
+        totalQuestions: 3,
+        title: 'Origins',
+        topicMeta: 'What is Kotlin?',
+        language: 'Kotlin',
+        prompt: 'Who created Kotlin?',
+        options: [
+          { id: 'A', label: 'Google', isCorrect: false },
+          { id: 'B', label: 'JetBrains', isCorrect: true },
+          { id: 'C', label: 'Oracle', isCorrect: false },
+          { id: 'D', label: 'Microsoft', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'JetBrains, 2011',
+          detail: 'Kotlin was created by JetBrains, the company behind IntelliJ IDEA. Google later adopted it as an official Android language in 2017, but did not create it.'
+        }
+      },
+      {
+        id: 'mcq-kotlin-2',
+        questionNumber: 2,
+        totalQuestions: 3,
+        title: 'Platforms',
+        topicMeta: 'What is Kotlin?',
+        language: 'Kotlin',
+        prompt: 'Which of these can Kotlin be used for?',
+        options: [
+          { id: 'A', label: 'Only Android apps', isCorrect: false },
+          { id: 'B', label: 'Only backend/server code', isCorrect: false },
+          { id: 'C', label: 'Android, backend, and more via Kotlin Multiplatform', isCorrect: true },
+          { id: 'D', label: 'Only iOS apps', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'Runs almost everywhere',
+          detail: 'Kotlin targets Android, JVM backends, JavaScript, and native platforms -- it is not limited to just one type of app.'
+        }
+      },
+      {
+        id: 'mcq-kotlin-3',
+        questionNumber: 3,
+        totalQuestions: 3,
+        title: 'Type System',
+        topicMeta: 'What is Kotlin?',
+        language: 'Kotlin',
+        prompt: 'Is Kotlin statically typed or dynamically typed?',
+        options: [
+          { id: 'A', label: 'Statically typed', isCorrect: true },
+          { id: 'B', label: 'Dynamically typed', isCorrect: false },
+          { id: 'C', label: 'It has no type system', isCorrect: false },
+          { id: 'D', label: 'Only dynamically typed on Android', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'Statically typed and null-safe',
+          detail: 'Kotlin checks every value\'s type before the program runs (statically typed), which is part of what makes it safer than dynamically typed languages.'
+        }
+      }
+    ]
+  },
+  mastered: {
+    topicTitle: 'What is Kotlin?',
+    summary: 'You now know what Kotlin is, who created it, where it runs, and why it\'s considered a modern, safe language.',
+    passedCount: '3 / 3 PASSED',
+    verificationItems: [
+      {
+        title: 'Concept understood',
+        subtitle: 'What Kotlin is, its origins, and where it runs'
+      },
+      {
+        title: 'Understanding checked',
+        subtitle: '3/3 comprehension questions answered correctly'
+      }
+    ],
+    xpEarned: 20,
+    streakDays: 1,
+    accuracy: '100%'
+  }
+};
+
+// This is where actual code first appears: the program entry point and basic
+// syntax. Function mechanics (parameters, return types) are intentionally
+// NOT taught here -- that belongs to the Functions world (World 5). Here
+// main() is only introduced as "the place execution starts."
+export const KOTLIN_SYNTAX_LESSON: FiveStageLesson = {
+  id: 'kotlin-syntax-lesson',
+  worldId: 'world-1',
+  worldName: 'Kotlin Awakening',
+  stageName: 'STAGE 1 — FOUNDATIONS',
+  topicTitle: 'Kotlin Syntax & main()',
+  learn: {
+    title: 'Your Program\'s Entry Point',
+    subtitle:
+      'Every Kotlin program needs a starting point. That starting point is always main() -- when you run a Kotlin program, this is the first place execution begins.',
+    exampleTag: 'EXAMPLE',
+    exampleTitle: 'Your first Kotlin program',
+    language: 'Kotlin',
+    codeSnippet: [
+      'fun main() {',
+      '    println("Hello, Kotlin!")',
+      '}'
+    ],
+    explanation: 'Every Kotlin program starts execution inside main() { }. The statements inside its curly braces run one after another, from top to bottom.',
+    keyIdeas: [
+      {
+        number: 1,
+        title: 'main() is the entry point',
+        description: 'The place where every Kotlin program begins running.'
+      },
+      {
+        number: 2,
+        title: 'Statements run top to bottom',
+        description: 'Code inside main() executes sequentially, in the order it is written.'
+      },
+      {
+        number: 3,
+        title: 'Curly braces { }',
+        description: 'Mark the start and end of main()\'s body -- everything between them is what runs.'
+      }
+    ],
+    keyTakeaway: 'Every Kotlin program starts with main() { ... } -- that is where execution begins.'
+  },
+  explore: {
+    title: 'Explore the Concept',
+    subtitle: 'See how a Kotlin program is structured, from its entry point to running statements in order.',
+    cards: [
+      {
+        id: 'card-1',
+        number: '01',
+        title: 'A minimal Kotlin program',
+        language: 'Kotlin',
+        subtitle: 'The smallest program Kotlin can run.',
+        code: [
+          'fun main() {',
+          '',
+          '}'
+        ],
+        whatItMeans: [
+          { label: 'main', description: 'the special name Kotlin looks for first when a program starts' },
+          { label: '()', description: 'required syntax after every entry point name' },
+          { label: '{ }', description: 'an empty body -- this program runs and does nothing' }
+        ],
+        whatChanged: 'We defined the smallest valid Kotlin program: an empty entry point.'
+      },
+      {
+        id: 'card-2',
+        number: '02',
+        title: 'Printing output',
+        language: 'Kotlin',
+        subtitle: 'Add a statement so the program actually does something.',
+        code: [
+          'fun main() {',
+          '    println("Hello, Kotlin!")',
+          '}'
+        ],
+        whatItMeans: [
+          { label: 'println(...)', description: 'prints text to the console, followed by a new line' },
+          { label: '"Hello, Kotlin!"', description: 'a String literal -- text wrapped in double quotes' }
+        ],
+        whatChanged: 'The program now produces visible output when it runs.'
+      },
+      {
+        id: 'card-3',
+        number: '03',
+        title: 'Running statements in order',
+        language: 'Kotlin',
+        subtitle: 'Multiple statements execute top to bottom.',
+        code: [
+          'fun main() {',
+          '    println("First")',
+          '    println("Second")',
+          '    println("Third")',
+          '}'
+        ],
+        whatItMeans: [
+          { label: 'Line order', description: 'Kotlin executes each statement in the order it appears' },
+          { label: 'Three println calls', description: 'produce three separate lines of output, in sequence' }
+        ],
+        whatChanged: 'We saw that a function body can contain multiple statements, executed in order.'
+      }
+    ]
+  },
+  predict: {
+    title: 'What will this code do?',
+    subtitle: 'Read the code, predict the result, then check your answer.',
+    questions: [
+      {
+        id: 'pred-syntax-1',
+        questionNumber: 1,
+        totalQuestions: 3,
+        title: 'Basic Output',
+        topicMeta: 'main() and println()',
+        language: 'Kotlin',
+        code: [
+          'fun main() {',
+          '    println("Kotlin")',
+          '}'
+        ],
+        prompt: 'What will this code print?',
+        options: [
+          { id: 'A', label: 'main', isCorrect: false },
+          { id: 'B', label: 'Kotlin', isCorrect: true },
+          { id: 'C', label: '"Kotlin"', isCorrect: false },
+          { id: 'D', label: 'Nothing', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'println("Kotlin")',
+          detail: 'println prints the text inside the quotes without the quote marks themselves, so it outputs Kotlin.'
+        }
+      },
+      {
+        id: 'pred-syntax-2',
+        questionNumber: 2,
+        totalQuestions: 3,
+        title: 'Statement Order',
+        topicMeta: 'Sequential execution',
+        language: 'Kotlin',
+        code: [
+          'fun main() {',
+          '    println("A")',
+          '    println("B")',
+          '}'
+        ],
+        prompt: 'What is printed first?',
+        options: [
+          { id: 'A', label: 'B', isCorrect: false },
+          { id: 'B', label: 'A', isCorrect: true },
+          { id: 'C', label: 'Both at the same time', isCorrect: false },
+          { id: 'D', label: 'Neither -- this is a compile error', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'println("A")',
+          detail: 'Kotlin executes statements top to bottom, so the first println call runs before the second.'
+        }
+      },
+      {
+        id: 'pred-syntax-3',
+        questionNumber: 3,
+        totalQuestions: 3,
+        title: 'Empty Function Body',
+        topicMeta: 'main() structure',
+        language: 'Kotlin',
+        code: [
+          'fun main() {',
+          '',
+          '}'
+        ],
+        prompt: 'What does this program print when it runs?',
+        options: [
+          { id: 'A', label: 'An empty line', isCorrect: false },
+          { id: 'B', label: 'Nothing', isCorrect: true },
+          { id: 'C', label: 'main', isCorrect: false },
+          { id: 'D', label: 'It fails to compile', isCorrect: false }
+        ],
+        explanation: {
+          codeRef: 'fun main() { }',
+          detail: 'A valid Kotlin program with an empty main() body runs successfully but produces no output, since there is no println statement.'
+        }
+      }
+    ]
+  },
+  writeRun: {
+    challengeNumber: 1,
+    totalChallenges: 1,
+    xpReward: 10,
+    title: 'Print a Welcome Message',
+    description: 'Write the main() function so it prints the exact message "Welcome to Kotlin!" to the console.',
+    requirements: {
+      name: 'main',
+      params: '(none)',
+      returns: 'Unit'
+    },
+    fileName: 'solution.kt',
+    initialCode: `fun main() {
+    // TODO: print "Welcome to Kotlin!" using println
+}`,
+    solutionCode: 'fun main() {\n    println("Welcome to Kotlin!")\n}',
+    sampleInput: 'main()',
+    expectedOutput: 'Welcome to Kotlin!',
+    // No testCase.call here: kotlinRunner.ts already auto-invokes main() once
+    // whenever it's present. Re-calling it via testCase (as FUNCTIONS_LESSON
+    // does for a non-main function like multiply(4, 5)) would run main() a
+    // second time, doubling the printed output and permanently failing the
+    // expectedOutput match even for correct code.
+    testCase: {
+      call: '',
+      expected: 'Welcome to Kotlin!'
+    }
+  },
+  debug: {
+    title: 'Diagnose the Broken Program',
+    subtitle: 'Inspect the program, find why it fails to compile, and fix it.',
+    challengeNumber: 1,
+    totalChallenges: 1,
+    difficulty: 'easy',
+    bugType: 'syntax',
+    bugLabel: 'Syntax Error: Unterminated String',
+    brokenCode: `fun main() {
+    println("Hello, Kotlin!)
+}`,
+    fixedCode: `fun main() {
+    println("Hello, Kotlin!")
+}`,
+    expectedOutput: 'Hello, Kotlin!',
+    hints: [
+      'Something is wrong with the text being printed.',
+      'Look closely at the quotation marks around the message.',
+      'The closing double quote (") is missing after "Hello, Kotlin!" -- add it back.'
+    ],
+    explanation: 'String literals must start and end with a double quote. The broken code was missing the closing quote after "Hello, Kotlin!", so the compiler could not tell where the text ends -- causing a syntax error.'
+  },
+  mastered: {
+    topicTitle: 'Kotlin Syntax & main()',
+    summary: 'You have learned how a Kotlin program starts at main(), and how statements run one after another.',
+    passedCount: '3 / 3 PASSED',
+    verificationItems: [
+      {
+        title: 'Concept understood',
+        subtitle: 'How main() starts a program and runs top to bottom'
+      },
+      {
+        title: 'Examples explored',
+        subtitle: '3 progressive program-structure examples'
+      },
+      {
+        title: 'Predictions completed',
+        subtitle: '3/3 correct output forecasts'
+      },
+      {
+        title: 'Code written & executed',
+        subtitle: '1 practical runtime test passed'
+      },
+      {
+        title: 'Bugs diagnosed & repaired',
+        subtitle: 'Resolved unterminated string syntax error & verified execution'
+      }
+    ],
+    xpEarned: 20,
+    streakDays: 1,
     accuracy: '100%'
   }
 };
@@ -1022,5 +1564,7 @@ export const VARIABLES_LESSON: FiveStageLesson = {
 export const AVAILABLE_FIVE_STAGE_LESSONS: Record<string, FiveStageLesson> = {
   variables: VARIABLES_LESSON,
   functions: FUNCTIONS_LESSON,
-  loops: LOOPS_LESSON
+  loops: LOOPS_LESSON,
+  'what-is-kotlin': WHAT_IS_KOTLIN_LESSON,
+  'kotlin-syntax': KOTLIN_SYNTAX_LESSON
 };
